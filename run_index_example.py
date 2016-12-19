@@ -1,7 +1,7 @@
 #run index selection
 ################## this code below should populate throught the interface
 import sys
-sys.path.append('D:/Python/AntoTradingSystem/indexifyLib/')
+sys.path.append('D:/Python/AntoTradingSystem/indexifyLib/') #change path
 from idxfy import yafin, idxfy as ix
 
 dfmaster = yafin.getmaster('Stock') #this can be added to the universe class
