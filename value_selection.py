@@ -9,6 +9,8 @@ dloc ='S:/Stoxx/Product Development and Research/Projects/2412 iSTOXX MUTB Value
 histloc = dloc + '05 History/'
 calcloc = histloc + '01_calc_steps/'
 
+sys.path.append('S:/Stoxx/Product Development and Research/Python')
+
 #selection
 
 def get_reg_filter(reg):
