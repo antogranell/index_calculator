@@ -107,6 +107,9 @@ for f in fs:
     dfjp['accruals'] = (dfjp['NetIncome'] - dfjp['4860_OpCF']) / dfjp['2999_TotalAssets']
     dfjp['screen'] = ''
 
+    #rkadtv = dfjp[dfjp.eligible.isnull()].groupby('date')['adtv_usd'].rank(method='first', ascending=1, pct=True)
+    #df2.loc[dfjp[dfjp.eligible.isnull()].index,'rkadtv'] = rkadtv
+    
     for d in dfjp.sort_values('date', ascending=True)['date'].drop_duplicates():
         dfidx1 = dfjp[(dfjp.date==d) & -(dfjp['60m_stdev'].isnull())].sort_values(['60m_stdev','ffmcap'], ascending=[True, False])[['60m_stdev','ffmcap']].index
         rk1 = np.arange(len(dfjp[(dfjp.date==d) & -(dfjp['60m_stdev'].isnull())])-1, -1, -1)
