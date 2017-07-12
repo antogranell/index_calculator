@@ -228,3 +228,21 @@ for f in fs:
     
     dfjp.drop_duplicates().to_csv(calcloc + '07_' + f + '_value_selection.csv', sep=';', index=False)
     print('weighting done')
+
+    
+t = np.arange(-1., 1., 0.01)
+
+def f(x):    
+    return 1. / (1. + exp(-x))
+def f_(x):
+    return sqrt(x)
+
+vecf = np.vectorize(f)
+vecf_ = np.vectorize(f_)
+
+fig, ax = plt.subplots()
+ax.plot(t, t, 'r--', label='factor value (x)')
+ax.plot(t, vecf(t), 'b-', label='value score:  1 / (1 + exp(-x))')
+ax.plot(t, vecf_(t), 'g-', label='sqrt')
+ax.plot(t, [stats.percentileofscore(t, x, kind='strict')/100. for x in t], 'k-', label='value perc_rank')
+legend = ax.legend(loc='lower right', shadow=True)
