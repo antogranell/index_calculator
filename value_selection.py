@@ -246,3 +246,12 @@ ax.plot(t, vecf(t), 'b-', label='value score:  1 / (1 + exp(-x))')
 ax.plot(t, vecf_(t), 'g-', label='sqrt')
 ax.plot(t, [stats.percentileofscore(t, x, kind='strict')/100. for x in t], 'k-', label='value perc_rank')
 legend = ax.legend(loc='lower right', shadow=True)
+
+
+#loop through files in directory
+import os
+import pandas as pd
+lst=[]
+ndir = 'U:/Documents/IPython Notebooks/'
+for filename in os.listdir(ndir):
+    lst.append(filename)
