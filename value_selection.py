@@ -259,6 +259,18 @@ for filename in os.listdir(ndir):
     
 #    ------------------------------------------
 
+import pandas as pd
+import time
+import datetime as dt
+import requests
+import sys
+import numpy as np
+import scipy.stats as stats
+%pylab inline
+
+loc = 'D:/Python/'
+sys.path.append(loc)
+
 df = pd.read_excel(loc + '00_portfolio_sample.xlsx', sheetname='pf2')
 df['date'] = df['date'].map(lambda x: pd.to_datetime(str(x)[:10], format='%Y-%m-%d', dayfirst=True))
 
