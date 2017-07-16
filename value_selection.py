@@ -255,3 +255,30 @@ lst=[]
 ndir = 'U:/Documents/IPython Notebooks/'
 for filename in os.listdir(ndir):
     lst.append(filename)
+
+    
+#    ------------------------------------------
+
+df = pd.read_excel(loc + '00_portfolio_sample.xlsx', sheetname='pf2')
+df['date'] = df['date'].map(lambda x: pd.to_datetime(str(x)[:10], format='%Y-%m-%d', dayfirst=True))
+
+time1=time.time()
+
+def myzscore(series):
+    value_med = df1.median()[len(df1.median())-1]
+    value_std = df1.std()[len(df1.std())-1]
+
+rkadtv = df.groupby('date')['adtv_usd'].rank(method='first', ascending=True, pct=True)
+df.loc[:,'rkadtv'] = rkadtv
+
+df = df[df.ffmcap>=1000000000] #mcap filter
+df = df[df.rkadtv>=0.05] #mcap filter
+
+df = df.sort_values(['date','rkadtv'], ascending=[True, False])
+df.to_excel(loc + '00_portfolio_results.xlsx', index=False)
+time2 = time.time()
+print('time elapsed:', (time2-time1), 'seconds')
+
+print(len(df))
+df.head()
+    
