@@ -268,17 +268,44 @@ import numpy as np
 import scipy.stats as stats
 %pylab inline
 
-loc = 'D:/Python/'
+loc = 'S:/Stoxx/Product Development and Research/Team/Antonio/Presentations/'
 sys.path.append(loc)
 
+def calccapfacs(df_comp):
+    """
+    received a df with -> column0:weight ;column1=cap; returns df with additional column2:capfactor; colum3:cappedwgt
+    reindexes the df starting with 1
+    """
+
+    df_comp = df_comp.sort_values(df_comp.columns[0],ascending=False)
+    df_comp.index = range(1,len(df_comp)+1)
+    df_comp['capfactor']=1
+    if sum(df_comp.iloc[:,1])<=1.:   
+        df_comp['cappedwgt'] = 1. / len(df_comp) #equal weight
+    else:
+        df_comp['cappedwgt'] = df_comp.iloc[:,0]
+        while len(df_comp[np.round(df_comp.cappedwgt, 7) > np.round(df_comp.iloc[:,1], 7)]) > 0:
+            dblToCap = df_comp[df_comp.cappedwgt >= df_comp.iloc[:,1]].cap.sum()
+            weightsnocap = df_comp[df_comp.cappedwgt < df_comp.iloc[:,1]].cappedwgt.sum()
+            dblDistFactor = weightsnocap / (1 - dblToCap)
+            for index, row in df_comp.iterrows():
+                if row['cappedwgt'] >= row[1]: 
+                    df_comp.loc[index,'cappedwgt'] = dblDistFactor * row[1]
+            dblcappedsum = df_comp.cappedwgt.sum()
+            df_comp['cappedwgt'] = df_comp['cappedwgt'] / dblcappedsum
+    df_comp['capfactor']=(df_comp['cappedwgt']/df_comp.iloc[:,0])/max(df_comp['cappedwgt']/df_comp.iloc[:,0])
+    return df_comp.reset_index(drop=True)
+
+#selection
 df = pd.read_excel(loc + '00_portfolio_sample.xlsx', sheetname='pf2')
 df['date'] = df['date'].map(lambda x: pd.to_datetime(str(x)[:10], format='%Y-%m-%d', dayfirst=True))
 
 time1=time.time()
 
-def myzscore(series):
-    value_med = df1.median()[len(df1.median())-1]
-    value_std = df1.std()[len(df1.std())-1]
+#def get_score(series):
+#    if isnull(series[0]) or if isnull(series[0]) or if isnull(series[0]):
+#        return null
+#df['score'] = df[['nPB', 'nPCF', 'nPE']].apply(get_score, axis=1)
 
 rkadtv = df.groupby('date')['adtv_usd'].rank(method='first', ascending=True, pct=True)
 df.loc[:,'rkadtv'] = rkadtv
@@ -286,11 +313,84 @@ df.loc[:,'rkadtv'] = rkadtv
 df = df[df.ffmcap>=1000000000] #mcap filter
 df = df[df.rkadtv>=0.05] #mcap filter
 
-df = df.sort_values(['date','rkadtv'], ascending=[True, False])
-df.to_excel(loc + '00_portfolio_results.xlsx', index=False)
+mean_pb = df.groupby('date').mean()['PB']
+mean_pcf = df.groupby('date').mean()['PCF']
+mean_pe = df.groupby('date').mean()['PE']
+
+stdev_pb = df.groupby('date').std()['PB']
+stdev_pcf = df.groupby('date').std()['PCF']
+stdev_pe = df.groupby('date').std()['PE']
+
+for i in range(len(mean_pb)):
+    #df.loc[df[df.date==d].index,'nPB'] = df.loc[df[df.date==d].index,'PB'].map(lambda x: (x - mean_pb)/x.stdev(ddof=1))
+    idx = df[df.date==mean_pb.index[i]].index
+    df.loc[idx,'nPB'] = (df.loc[idx,'PB'] - mean_pb[i]) / stdev_pb[i]
+    df.loc[idx,'nPCF'] = (df.loc[idx,'PCF'] - mean_pcf[i]) / stdev_pcf[i]
+    df.loc[idx,'nPE'] = (df.loc[idx,'PE'] - mean_pe[i]) / stdev_pe[i]
+    
+df['score'] = (df['nPB'] + df['nPCF'] + df['nPE']) / 3
+
+#selection
+component_number = 100
+ct = 0
+
+for d in df.sort_values('date', ascending=True)['date'].drop_duplicates():
+
+    ct=ct+1
+    if ct==1:
+        df.loc[df[df.date==d].index,'old'] = False
+    else:
+        #mark current components
+        dfnew = df[(df.date==d)][['isin']] #take all current candidates
+        dfnew = pd.merge(dfnew, dfold, how='left', on='isin') #link old (column new)
+        dfnew['new'] = dfnew['new'].fillna(False)
+        listold = dfnew['new'].tolist()
+        df.loc[df[df.date==d].index,'old'] = listold          
+
+        
+    idx2rk = df[(df.date==d) & ((df.old==True) | ((df.old==False) & (df.rkadtv>=0.2)))].index
+    idxranked = df.loc[idx2rk,:].sort_values(['score','ffmcap'], ascending=[False, False])[['score','ffmcap']].index
+    rk1 = np.arange(1, len(df.loc[idx2rk,:])+1, 1)
+    df.loc[idxranked, 'final_rank'] = rk1
+    
+    df.loc[(df[(df.date==d) & (df.final_rank<=component_number)].index), 'new'] = True
+    dfold=df[(df.date==d) & (df.new==True)][['isin','new']]
+
+#weighting
+df['wgt']=0
+df['cap']=0.02
+sumcap = df[df.new==True].groupby('date').sum()['ffmcap']
+ctcomps = df[df.new==True].groupby('date').count()['isin']
+
+for i in range(len(sumcap)):
+    wgt = df.loc[df[(df.new==True) & (df.date==sumcap.index[i])].index, 'ffmcap'] / sumcap[i]
+    df.loc[wgt.index,'wgt'] = wgt
+    dfftrs = calccapfacs(df.loc[df[(df.new==True) & (df.date==sumcap.index[i])].index,['wgt','cap']])
+    dfftrs.index = wgt.index #reindex
+    df.loc[wgt.index,'weight'] = dfftrs['cappedwgt']
+
+df = df.sort_values(['date','weight'], ascending=[True, False])
+df.to_excel(loc + '00_portfolio_results.xlsx', index=True)
 time2 = time.time()
 print('time elapsed:', (time2-time1), 'seconds')
 
 print(len(df))
 df.head()
-    
+
+
+# ----------------------------------
+
+PB = df.groupby('date').apply(lambda x: (x.PB*x.weight).sum())
+PCF = df.groupby('date').apply(lambda x: (x.PCF*x.weight).sum())
+dffund = pd.concat([PB,PCF], axis=1)
+dffund.columns = ['Price-Book', 'Price-CashFlow']
+dffund['date']= dffund.index
+cols=dffund.columns.tolist()
+dffund=dffund[cols[-1:] + cols[:-1]] 
+dffund.index.name = None
+dffund.plot(kind='bar', stacked=True)
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+plt.suptitle('Fundamentals', fontsize=15, fontweight='bold')
+dffund.plot()
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+plt.gcf().autofmt_xdate()
