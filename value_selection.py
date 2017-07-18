@@ -415,3 +415,34 @@ dfsum.T.plot()
 plt.suptitle('Historical PB by country', fontsize=15)
 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 plt.xticks(rotation=45)
+
+
+#############
+
+#history
+df = pd.read_excel(loc + '00_portfolio_sample.xlsx', sheetname='ts')
+df['Date'] = df['Date'].map(lambda x: pd.to_datetime(str(x)[:10], format='%Y-%m-%d', dayfirst=True))
+
+ret = np.array(df.iloc[1:len(df),1:]) / np.array(df.iloc[0:len(df)-1,1:])
+
+dfret = pd.DataFrame(ret, index=list(df.Date[1:]))
+dfret.columns = df.columns[1:]
+#dfret = dfret / dfret.iloc[0,:]
+
+wgts = [0.3,0.7]
+
+for i in range(len(wgts)):
+    dfret.iloc[:,i] = dfret.iloc[:,i] * wgts[i]
+    
+pf = dfret.sum(axis=1)
+
+ix = []
+lst = 100
+ix.append(lst)
+for j in range(len(pf)):
+    lst = pf[j] * lst
+    ix.append(lst)
+    
+df['pf'] = ix
+
+df.plot()
