@@ -394,3 +394,24 @@ plt.suptitle('Fundamentals', fontsize=15, fontweight='bold')
 dffund.plot()
 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 plt.gcf().autofmt_xdate()
+
+#_______________________________________
+
+ct=0
+for d in df.iloc[:,:].sort('date', ascending=True)['date'].drop_duplicates():
+    print(d)
+    gr = df[df.date==d].groupby('country').mean()
+    #gr = gr.loc[:,'PB'].copy()
+    gr.index.name = None
+    if ct==0:
+        dfsum = pd.DataFrame(gr.loc[:,'PB'])
+    else:
+        dfsum = pd.concat([dfsum, pd.DataFrame(gr.loc[:,'PB'])], axis=1)
+
+    dfsum = dfsum.rename(columns={'PB':str(d)[:10]})
+    ct +=1
+
+dfsum.T.plot()
+plt.suptitle('Historical PB by country', fontsize=15)
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+plt.xticks(rotation=45)
