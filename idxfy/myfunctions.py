@@ -1,4 +1,5 @@
 import pandas as pd
+import sys
 import numpy as np
 import datetime as dt
 import qadconnect34plus as q 
@@ -65,20 +66,25 @@ def get_web_file(fpath):
     return pd.DataFrame(data)
 
 def get_web_h(idxlist, usedates=False, dfrom='1.1.1980', dto='1.1.2050', special=False):
+
     import requests
     from requests.auth import HTTPBasicAuth
-    with open('creds.txt') as c: #creds.txt file contains: name.surname@stoxx.com,pass
+    with open('C:/Users/iv822/Documents/Python Scripts/creds.txt') as c: #creds.txt file contains: name.surname@stoxx.com,pass
         creds = c.read()
     creds=creds.split(',')
     auth = HTTPBasicAuth(creds[0],creds[1])
+    proxyDict = { 
+                  "https"  : 'https://webproxy-fra.deutsche-boerse.de:8080'
+                }
 
     if usedates==True:
         dfrom=dfrom
         dto=dto
 
     for f in idxlist:
-        url='http://www.stoxx.com/download/historical_data/h_'+f.lower()+'.txt'
-        r = requests.get(url, auth=auth)
+        #url='https://www.stoxx.com/document/Indices/Current/HistoricalData/h_'+f.lower()+'.txt'
+        url='https://www.stoxx.com/download/historical_data/h_'+f.lower()+'.txt'
+        r = requests.get(url, auth=auth, proxies=proxyDict)
         text = r.text
         rows = text.split('\n')[1:]
         if special==False:
@@ -103,6 +109,7 @@ def get_web_h(idxlist, usedates=False, dfrom='1.1.1980', dto='1.1.2050', special
     if usedates:
         dfres=filterdts(dfrom, dto, dfres)
         dfres=dfres.sort('Date', ascending=True)
+		
     return dfres
 
 
@@ -157,6 +164,20 @@ def calc_an_div_yields(df):
     del dfdy['yr']  
     return dfdy
 
+def calc_an_rets(df):
+    dates=pd.DatetimeIndex(df.iloc[:,0])
+    isyearend=(dates.month[0:len(dates)-1]>dates.month[1:len(dates)])
+    dates1=dates[:len(dates)]
+    yearend=dates1[isyearend]
+    dflastday=pd.DataFrame(yearend)
+    df1=pd.merge(dflastday, df, left_on=dflastday.columns[0], right_on=df.columns[0])
+    del df1[df1.columns[0]]
+    df1.index=df1[df1.columns[0]]
+    df1.index.name = None
+    del df1[df1.columns[0]]
+    returns=np.array(df1.iloc[1:len(df1),:])/np.array(df1.iloc[0:len(df1)-1,:])-1
+    return pd.DataFrame(returns, columns = df1.columns, index=df1.index[1:])
+	
 #calculates DY for each month, quarter, year
 #gets dataframe with columns: date, price, net, gross; outputs dataframe; Date need to be in date format (parse_dates=[0], dayfirst=True)
 def calc_div_yields_ext(df):
@@ -669,7 +690,7 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     
     dtfull = df1.iloc[0,0]
     strdtfull = str(dtfull)[:10]
-    yrstemp = ['1m', 'YTD', '1y','3y','5y', 'from ' + strdtfull]
+    yrstemp = ['1m', 'YTD', '1y','3y','5y','10y', 'from ' + strdtfull]
 
     dtytd = dt.date(dto.year-1, 12, 31)
     dtytd = df1[df1.Date>=dtytd].iloc[0,0]
@@ -677,6 +698,9 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     dt1m = add_months(dto,-1)
     dt1m = df1[df1.Date>=dt1m].iloc[0,0]
 
+    dt10 = add_months(dto,-12*10)
+    dt10 = df1[df1.Date>=dt10].iloc[0,0]
+    
     dt5 = add_months(dto,-12*5)
     dt5 = df1[df1.Date>=dt5].iloc[0,0]
 
@@ -700,6 +724,11 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     elif dt1m.weekday()==6:
         dt1m=dt1m-dt.timedelta(days=2)
 
+    if dt10.weekday()==5:
+        dt10=dt10-dt.timedelta(days=1)
+    elif dt10.weekday()==6:
+        dt10=dt10-dt.timedelta(days=2)
+        
     if dt5.weekday()==5:
         dt5=dt5-dt.timedelta(days=1)
     elif dt5.weekday()==6:
@@ -720,13 +749,14 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     elif dt0.weekday()==6:
         dt0=dt0-dt.timedelta(days=2)
 
-    dtlst=[dtfull, dt5, dt3, dt1, dtytd, dt1m, dt0] #6 dates
-    ctfull = len(df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[0])]) #observation counts
-    ct5y = len(df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[1])])
-    ct3y = len(df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[2])])
-    ct1y = len(df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[3])])
-    ct1m = len(df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[4])])
-    ctytd = len(df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[5])])
+    dtlst=[dtfull, dt10, dt5, dt3, dt1, dtytd, dt1m, dt0] #7 dates
+    ctfull = len(df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[0])]) #observation counts
+    ct10y = len(df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[1])])
+    ct5y = len(df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[2])])
+    ct3y = len(df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[3])])
+    ct1y = len(df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[4])])
+    ct1m = len(df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[5])])
+    ctytd = len(df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[6])])
 
     #dfvals=df1[df1.Date.isin(dtlst)==True]
     dfvals=pd.DataFrame()
@@ -748,11 +778,12 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     #annualized returns
     dfannret=dfactret
     dfannret.iloc[0,:3]=dfannret.iloc[0,:3].map(lambda x: (x+1)**(250/ctfull)-1)
-    dfannret.iloc[1,:3]=dfannret.iloc[1,:3].map(lambda x: (x+1)**(250/ct5y)-1)
-    dfannret.iloc[2,:3]=dfannret.iloc[2,:3].map(lambda x: (x+1)**(250/ct3y)-1)
-    dfannret.iloc[3,:3]=dfannret.iloc[3,:3].map(lambda x: (x+1)**(250/ct1y)-1)
-    dfannret.iloc[4,:3]=dfannret.iloc[4,:3].map(lambda x: (x+1)**(250/ct1m)-1)
-    dfannret.iloc[5,:3]=dfannret.iloc[5,:3].map(lambda x: (x+1)**(250/ctytd)-1)
+    dfannret.iloc[1,:3]=dfannret.iloc[1,:3].map(lambda x: (x+1)**(250/ct10y)-1)
+    dfannret.iloc[2,:3]=dfannret.iloc[2,:3].map(lambda x: (x+1)**(250/ct5y)-1)
+    dfannret.iloc[3,:3]=dfannret.iloc[3,:3].map(lambda x: (x+1)**(250/ct3y)-1)
+    dfannret.iloc[4,:3]=dfannret.iloc[4,:3].map(lambda x: (x+1)**(250/ct1y)-1)
+    dfannret.iloc[5,:3]=dfannret.iloc[5,:3].map(lambda x: (x+1)**(250/ct1m)-1)
+    dfannret.iloc[6,:3]=dfannret.iloc[6,:3].map(lambda x: (x+1)**(250/ctytd)-1)
     list2=np.array(dfannret)
     dfannret.columns=[0,1,2,3]
 
@@ -761,12 +792,13 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     dfr=pd.DataFrame(returns)
     dfr['Date']=list(df1.loc[1:,'Date'])
     vol=[]
-    vol.append(np.std(dfr[(dfr.Date <= dtlst[6]) & (dfr.Date > dtlst[0])].iloc[:,:3], ddof=1)*np.sqrt(250))
-    vol.append(np.std(dfr[(dfr.Date <= dtlst[6]) & (dfr.Date > dtlst[1])].iloc[:,:3], ddof=1)*np.sqrt(250))
-    vol.append(np.std(dfr[(dfr.Date <= dtlst[6]) & (dfr.Date > dtlst[2])].iloc[:,:3], ddof=1)*np.sqrt(250))
-    vol.append(np.std(dfr[(dfr.Date <= dtlst[6]) & (dfr.Date > dtlst[3])].iloc[:,:3], ddof=1)*np.sqrt(250))
-    vol.append(np.std(dfr[(dfr.Date <= dtlst[6]) & (dfr.Date > dtlst[4])].iloc[:,:3], ddof=1)*np.sqrt(250))
-    vol.append(np.std(dfr[(dfr.Date <= dtlst[6]) & (dfr.Date > dtlst[5])].iloc[:,:3], ddof=1)*np.sqrt(250))
+    vol.append(np.std(dfr[(dfr.Date <= dtlst[7]) & (dfr.Date > dtlst[0])].iloc[:,:3], ddof=1)*np.sqrt(250))
+    vol.append(np.std(dfr[(dfr.Date <= dtlst[7]) & (dfr.Date > dtlst[1])].iloc[:,:3], ddof=1)*np.sqrt(250))
+    vol.append(np.std(dfr[(dfr.Date <= dtlst[7]) & (dfr.Date > dtlst[2])].iloc[:,:3], ddof=1)*np.sqrt(250))
+    vol.append(np.std(dfr[(dfr.Date <= dtlst[7]) & (dfr.Date > dtlst[3])].iloc[:,:3], ddof=1)*np.sqrt(250))
+    vol.append(np.std(dfr[(dfr.Date <= dtlst[7]) & (dfr.Date > dtlst[4])].iloc[:,:3], ddof=1)*np.sqrt(250))
+    vol.append(np.std(dfr[(dfr.Date <= dtlst[7]) & (dfr.Date > dtlst[5])].iloc[:,:3], ddof=1)*np.sqrt(250))
+    vol.append(np.std(dfr[(dfr.Date <= dtlst[7]) & (dfr.Date > dtlst[6])].iloc[:,:3], ddof=1)*np.sqrt(250))
     dfvola=pd.DataFrame(vol)
     dfvola.columns=df1.columns[1:4]
     dfvola['years'] = yrs
@@ -782,7 +814,7 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     #sharpe ratio
     shrp=[]
     for d in range(len(dtlst[1:])):
-        dft = df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[d])]
+        dft = df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[d])]
         returns = np.array(dft.iloc[1:len(dft),1:4])/np.array(dft.iloc[0:len(dft)-1,1:4])-1
         eonia = np.array(dft.iloc[0:len(dft)-1,4])
         timedelta = np.array([(dft.iloc[i+1,0]-dft.iloc[i,0]).days for i in range(len(dft)-1)])
@@ -798,7 +830,7 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     #max drawdown
     mxdd = []
     for d in range(len(dtlst[1:])):
-        dft = df1[(df1.Date <= dtlst[6]) & (df1.Date > dtlst[d])]
+        dft = df1[(df1.Date <= dtlst[7]) & (df1.Date > dtlst[d])]
         pk = np.zeros((len(dft)+1,3))
         dd = np.zeros((len(dft)+1,4))
         h = np.array(dft.iloc[:,1:4])
@@ -817,6 +849,7 @@ def calc_stats_sharpe_ext(df1, rfrate=True): #True or nothing means use EONIA fr
     dfres.columns=[df1.columns[1], df1.columns[2], df1.columns[3], 'period']  
     
     return dfres
+
 
 def filterdts(dfrom,dto,df):
     dfreturn=df[df['Date']>=dfrom][df['Date']<=dto]
@@ -847,6 +880,13 @@ def rollCorr(a,b,window):
     for i in range(window,len(a)):
         rollCorr[i]=myCorr(a[i-window:i+1],b[i-window:i+1])
     return rollCorr
+	
+def rollTE(a,b,window):
+    rollTE=np.zeros((len(a)))
+    window=window-1
+    for i in range(window,len(a)):
+        rollTE[i] = np.std(a[i-window:i+1]-b[i-window:i+1],ddof=1)*np.sqrt(250)
+    return rollTE
 
 def rollMean(a,window):
     rollMean=np.zeros((len(a)))
