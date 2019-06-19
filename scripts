@@ -1,0 +1,9 @@
+import matplotlib.pyplot as plt
+from scipy.stats.kde import gaussian_kde
+
+def plot_pdf(data, label=''):
+    kde = gaussian_kde(list(data))
+    dist_space = linspace(min(data), max(data), 100)
+    plt.plot(dist_space, kde(dist_space), label=label)
+    plt.legend(loc='upper left', bbox_to_anchor=(0, -0.2), shadow=True, ncol=1)
+    plt.xticks(rotation=45)
