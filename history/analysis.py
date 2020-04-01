@@ -748,3 +748,98 @@ class storeOther:
 #
 #        print('table', results_tb_name, 'created')
 #
+    def create_score_data(self, calc_date, cam_year, dat):
+        '''
+        this function creates the score_data_yyyymm tables in the quant_data schema
+        :param calc_date: YYYYMM of the calculation month
+        :param cam_year: YYYY of the latest campaign for that calc_date
+        :param dat: cut-off date for scores: DATE_SCORES field form CONFIG_DATES_2 table
+        '''
+        gc.collect()
+        con = cx_Oracle.connect(c.constr)
+        cur = con.cursor()
+
+        t1 = time.time()
+
+    def drop_table_if_exists(self, tablename):
+
+        con = cx_Oracle.connect(c.constr)
+        cur = con.cursor()
+
+        sql = '''begin
+                execute immediate 'drop table ''' + tablename + ''''; exception when others then null; 
+                end;
+                '''
+        cur.execute(sql)
+        
+        
+    
+        effective_date = str(dat + dt.timedelta(days=1))[:10]
+        cam_years = str(cam_year)+','+str(cam_year-1)
+
+        self.drop_table_if_exists('score_data_' + str(calc_date))
+
+        ### code to study
+        #'''select * from (select cam_year, csf_lcid, case when row_number() over (partition by cam_year, csf_lcid order
+        #by evr_run_time desc) = 1 then 1 else 0 end latest_score_flag
+        #from bi_flat.dw_quant_public_scores_v) a where a.latest_score_flag=1 and a.cam_year=2019;'''
+
+        sql = '''create table score_data_''' + str(calc_date) + ''' as
+                with latest as 
+                (select csf_lcid, evr_id, row_number() over (partition by csf_lcid
+                    order by cam_year desc, cam_type asc, evr_run_time desc) evr_latest_flag
+                    from bi_flat.dw_quant_public_companies_v
+                where cam_year in(''' + str(cam_years) + ''') and evr_run_time <= date ' ''' + str(effective_date) + ''' '
+                )
+                select ''' + str(calc_date) + ''' calc_date, date ' ''' + str(dat)[:10] + ''' ' cut_date,
+                    ''' + c.score_data_flds + ''',
+                    case when c.asp_flagnames like '%Compulsory%' then 1 end COMPULSORY,
+                    case when c.asp_flagnames like '%MSA%' then 1 end MSA,
+                    case when c.asp_flagnames like 'Public%' then 1 end PUBLIC_
+                    from bi_flat.dw_quant_public_scores_v c
+                left join universe.cor_csf_sat_t csf
+                on csf.csf_lcid = c.csf_lcid
+                    and csf.csf_his_from <= date ' ''' + str(effective_date) + ''' '
+                    and csf.csf_his_till >  date ' ''' + str(effective_date) + ''' '
+                    left join cdh_data.gics_v g on g.GIC_SUBINDUSTRY=csf.csf_gics and g.todate >= date '9999-12-31'
+                    where (c.evr_id, c.csf_lcid) in (select evr_id, csf_lcid from latest where evr_latest_flag = 1)
+                    and c.sco_weight is not null
+                '''
+        cur.execute(sql)
+
+        sql1 = '''select count(CSF_LCID) from (select distinct CSF_LCID from score_data_''' + str(calc_date) + ''')
+                '''
+        cur.execute(sql1)
+
+        component_count = cur.fetchall()[0][0]
+
+        print(calc_date, 'scores created - ', component_count, 'components')
+
+        hlp.time_it(t1)
+        
+        
+#    sql = '''with x as (
+#        select a.*,
+#        row_number() over (partition by csf_lcid order by abs(ultimo - date ' ''' \
+#        + str(cut_off_day) + ''' ')) rn
+#        from cdh_data.security_detail_ultimo_mv a
+#        where eqy_usd_adj_mkt_cap is not null
+#        order by id_bb_global_company, id_isin, ultimo
+#        )
+#        select  ''' + str(calc_date) + ''' calc_date, a.*, e.BBGID, b.eqy_usd_adj_mkt_cap as FULL_MCAP_USD, 
+#        b.eqy_usd_adj_float_mkt_cap as FF_MCAP_USD, b.ultimo as mcap_date
+#        from ((select distinct CAM_YEAR, CSF_LCID, CSF_LONGNAME, CSF_ISIN, CSF_BB_COMPANY from
+#        score_data_''' + str(calc_date) + ''') a 
+#
+#        left join 
+#
+#        (select * from x where rn=1) b
+#        on
+#        a.csf_lcid=b.csf_lcid)
+#        left join (select c.CSF_LCID, c.BBGID from mcaps_annual c 
+#        left join mcaps_annual_duplicates d
+#        on c.cam_year = d.cam_year and c.csf_lcid = d.csf_lcid and c.bbgid = d.bbgid
+#        where d.duplicate is null and c.cam_year=''' + str(cam_year) + ''') e
+#        on
+#        b.CSF_LCID=e.CSF_LCID            
+#        '''
