@@ -1,0 +1,31 @@
+def calccapfacs(df_comp):
+    """
+    received a df with -> column0:weight ;column1=cap; returns df with additional column2:capfactor; colum3:cappedwgt
+    reindexes the df starting with 1
+    """
+
+    df_comp = df_comp.sort_values(df_comp.columns[0],ascending=False)
+    df_comp.index = range(1,len(df_comp)+1)
+    df_comp['capfactor']=1
+    if sum(df_comp.iloc[:,1])<=1.:   
+        df_comp['cappedwgt'] = 1. / len(df_comp) #equal weight
+    else:
+        df_comp['cappedwgt'] = df_comp.iloc[:,0]
+        while len(df_comp[np.round(df_comp.cappedwgt, 7) > np.round(df_comp.iloc[:,1], 7)]) > 0:
+            dblToCap = df_comp[df_comp.cappedwgt >= df_comp.iloc[:,1]].cap.sum()
+            weightsnocap = df_comp[df_comp.cappedwgt < df_comp.iloc[:,1]].cappedwgt.sum()
+            dblDistFactor = weightsnocap / (1 - dblToCap)
+            for index, row in df_comp.iterrows():
+                if row['cappedwgt'] >= row[1]: 
+                    df_comp.loc[index,'cappedwgt'] = dblDistFactor * row[1]
+            dblcappedsum = df_comp.cappedwgt.sum()
+            df_comp['cappedwgt'] = df_comp['cappedwgt'] / dblcappedsum
+    df_comp['capfactor']=(df_comp['cappedwgt']/df_comp.iloc[:,0])/max(df_comp['cappedwgt']/df_comp.iloc[:,0])
+    return df_comp.reset_index(drop=True)
+
+wgts = [0.295452703, 0.243170949, 0.194536759, 0.175083083, 0.056739888, 0.035016617]
+caps = [0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+df_comp = pd.DataFrame([wgts,caps]).T
+df_comp.columns = ['weight','cap']
+
+calccapfacs(df_comp)
